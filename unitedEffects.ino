@@ -1,38 +1,65 @@
 #include <FastLED.h>
-
+FASTLED_USING_NAMESPACE
+#define BUTTON_PIN_1  2 // Button for switching effects
+#define BUTTON_PIN_1  8 // Button for switching solid colors
 #define LED_PIN     6
 #define NUM_LEDS    60
+#define VOLTS       5
+#define MAX_MA      2000
 #define BRIGHTNESS  255
 #define LED_TYPE    WS2812B
 #define COLOR_ORDER GRB
+#define FRAMES_PER_SECOND  120
 CRGB leds[NUM_LEDS];
 CRGBPalette16 gPal;
 
-#define BUTTON_PIN  2
+// List of effects to cycle through.  Each is defined as a separate function below.
+typedef void (*SimpleEffectList[])();
+SimpleEffectList sEffects = {pride, rainbow, rainbowWithGlitter, pacifica_loop, Fire2012WithPalette, cylon, confetti, sinelon, juggle, bpm, waveEffect };
+
 bool gReverseDirection = false;
-bool buttonPressed = false;
+bool first_buttonPressed = false;
+bool second_buttonPressed = false;
 uint8_t gHue = 0;  // Global hue variable
+uint8_t currentEffect = 0;
+uint8_t currentColor = 0;
+
 
 void setup() {
   delay(1000);
-  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  Serial.begin(9600); 
+  FastLED.setMaxPowerInVoltsAndMilliamps( VOLTS, MAX_MA);
+  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip).setDither(BRIGHTNESS < 255);
   FastLED.setBrightness(BRIGHTNESS);
-   gPal = HeatColors_p;
-  pinMode(BUTTON_PIN, INPUT_PULLUP);  // Use internal pull-up resistor for the button
+  gPal = HeatColors_p;
+  //pinMode(BUTTON_PIN_1, INPUT);  // Use external pull-up resistor for the button
+  //pinMode(BUTTON_PIN_2, INPUT);  // Use external pull-up resistor for the button
 }
 
-void loop() {
-  static int currentEffect = 0;
-  static unsigned long lastButtonPress = 0;
-  const unsigned long debounceDelay = 50;
-  random16_add_entropy( random());
 
-  if (digitalRead(BUTTON_PIN) == LOW && (millis() - lastButtonPress > debounceDelay)) {
+
+CRGB solidColors[] = {CRGB::Red, CRGB::Green, CRGB::Blue, CRGB::Yellow, CRGB::Cyan, CRGB::Magenta, CRGB::White};
+
+void loop() {
+  readButton1();
+  readButton2();
+  /*bool currentState = digitalRead(BUTTON_PIN);
+
+  if (currentState == pressed){ 
+    while(digitalRead(BUTTON_PIN) == pressed){}
+    nextPattern(); 
+    Serial.println(gCurrentPatternNumber);
+    delay(100);*/
+  
+  random16_add_entropy( random());
+  sEffects[currentEffect]();
+
+  /*if (digitalRead(BUTTON_PIN) == LOW && (millis() - lastButtonPress > debounceDelay)) {
     lastButtonPress = millis();
     currentEffect = (currentEffect + 1) % 30;  // Cycle through all effects including wave effects
-  }
+  }*/
 
-  switch (currentEffect) {
+  /*switch (currentEffect) {
     case 0: pride(); break;
     case 1: rainbow(); break;
     case 2: rainbowWithGlitter(); break;
@@ -62,11 +89,44 @@ void loop() {
     case 26: fill_solid(leds, NUM_LEDS, CRGB::Magenta); break;
     case 27: fill_solid(leds, NUM_LEDS, CRGB::Pink); break;
     case 28: fill_solid(leds, NUM_LEDS, CRGB::Yellow); break;
-    case 29: fill_solid(leds, NUM_LEDS, CRGB::White); break;
+    case 29: fill_solid(leds, NUM_LEDS, CRGB::White); break;*/
   }
 
   FastLED.show();
   FastLED.delay(20);
+}
+
+#define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
+
+void nextEffect()
+{
+  // add one to the current effect number, and wrap around at the end
+  currentEffect = (currentEffect + 1) % ARRAY_SIZE(sEffects);
+
+void nextColor()
+{
+  // add one to the current color number, and wrap around at the end
+  currentColor = (currentColor + 1) % (sizeof(solidColors) / sizeof(CRGB) + 1);
+}
+
+void readButton1() {
+  bool currentState = digitalRead(BUTTON_PIN_1);
+
+  if (currentState == first_buttonPressed){ 
+    while(digitalRead(BUTTON_PIN_1) == first_buttonPressed){}
+    nextEffect(); 
+    Serial.println(currentEffect);
+    delay(100);
+}
+
+void readButton2() {
+  bool currentState = digitalRead(BUTTON_PIN_2);
+
+  if (currentState == second_buttonPressed){ 
+    while(digitalRead(BUTTON_PIN_2) == second_buttonPressed){}
+    nextColor(); 
+    Serial.println(currentEffect);
+    delay(100);
 }
 
 // Pride effect
@@ -111,6 +171,35 @@ void confetti() {
   leds[pos] += CHSV(random8(64), 200, 255);
 }
 
+void sinelon()
+{
+  // a colored dot sweeping back and forth, with fading trails
+  fadeToBlackBy( leds, NUM_LEDS, 20);
+  int pos = beatsin16( 13, 0, NUM_LEDS-1 );
+  leds[pos] += CHSV( gHue, 255, 192);
+}
+
+void bpm()
+{
+  // colored stripes pulsing at a defined Beats-Per-Minute (BPM)
+  uint8_t BeatsPerMinute = 62;
+  CRGBPalette16 palette = PartyColors_p;
+  uint8_t beat = beatsin8( BeatsPerMinute, 64, 255);
+  for( int i = 0; i < NUM_LEDS; i++) { //9948
+    leds[i] = ColorFromPalette(palette, gHue+(i*2), beat-gHue+(i*10));
+  }
+}
+
+void juggle() {
+  // eight colored dots, weaving in and out of sync with each other
+  fadeToBlackBy( leds, NUM_LEDS, 20);
+  uint8_t dothue = 0;
+  for( int i = 0; i < 8; i++) {
+    leds[beatsin16( i+7, 0, NUM_LEDS-1 )] |= CHSV(dothue, 200, 255);
+    dothue += 32;
+  }
+}
+
 // Cylon effect that moves a light back and forth
 void cylonEffect(CRGB color) {
   for (int i = 0; i < NUM_LEDS; i++) {
@@ -142,14 +231,16 @@ void addGlitter(fract8 chanceOfGlitter) {
 }
 
 // Wave effect for flowing color
-void waveEffect(CRGB color) {
+void waveEffect() {
   uint8_t wavePhase = millis() >> 4;
   for (int i = 0; i < NUM_LEDS; i++) {
-    leds[i] = color;
+    leds[i] = solidColors[currentColor];
     leds[i].fadeLightBy(sin8(wavePhase + (i * 16)));
   }
   wavePhase++;
 }
+
+
 
 CRGBPalette16 pacifica_palette_1 = 
     { 0x000507, 0x000409, 0x00030B, 0x00030D, 0x000210, 0x000212, 0x000114, 0x000117, 
